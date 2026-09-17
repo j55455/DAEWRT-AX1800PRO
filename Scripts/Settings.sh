@@ -32,7 +32,7 @@ sed -i "s/192\.168\.[0-9]*\.[0-9]*/$WRT_IP/g" $CFG_FILE
 sed -i "s/hostname='.*'/hostname='$WRT_NAME'/g" $CFG_FILE
 
 vlmcsd_patches="./feeds/packages/net/vlmcsd/patches/"
-mkdir -p $vlmcsd_patches && cp -f ../patches/001-fix_compile_with_ccache.patch $vlmcsd_patches
+[ -f "../patches/001-fix_compile_with_ccache.patch" ] && mkdir -p $vlmcsd_patches && cp -f ../patches/001-fix_compile_with_ccache.patch $vlmcsd_patches
 
 #修复dropbear
 # #sed -i "s/Interface/DirectInterface/" ./package/network/services/dropbear/files/dropbear.config
