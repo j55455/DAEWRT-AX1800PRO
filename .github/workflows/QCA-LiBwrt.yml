@@ -35,8 +35,8 @@ jobs:
         #CONFIG: [IPQ807X-NOWIFI, IPQ807X-WIFI,IPQ60XX-NOWIFI, IPQ60XX-WIFI]
         CONFIG: [IPQ60XX-WIFI]
 #LiBwrt        
-        SOURCE: [LiBwrt/openwrt-6.x]
-        BRANCH: [main-nss]
+        SOURCE: [LiBwrt/LibWrt]
+        BRANCH: [25.12-nss]
 
 #immortalwrt
         #SOURCE: [VIKINGYFY/immortalwrt]
