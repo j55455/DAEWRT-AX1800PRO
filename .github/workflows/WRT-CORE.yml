@@ -134,11 +134,13 @@ jobs:
       - name: Update Dae/Daed rules
         run: |
          cd ./wrt
-         mkdir -p files/usr/share/dae
-         wget -O files/usr/share/dae/geoip.dat https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geoip.dat
-         wget -O files/usr/share/dae/geosite.dat https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geosite.dat
+         mkdir -p files/usr/share/dae files/usr/share/v2ray
+         wget -O files/usr/share/v2ray/geoip.dat https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geoip.dat
+         wget -O files/usr/share/v2ray/geosite.dat https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geosite.dat
          cd files/usr/share
-         ln -s dae daed
+         ln -sf ../v2ray/geoip.dat dae/geoip.dat
+         ln -sf ../v2ray/geosite.dat dae/geosite.dat
+         ln -sf dae daed
          ls -l
 
 
@@ -199,24 +201,6 @@ jobs:
           cd ./wrt/
 
           make download -j$(nproc)
-
-
-#############################测试代码####
-          
-      - name: Update Dae Core/Config
-        run: |
-          cd ./wrt/
-          wget -O dae.zip https://github.com/daeuniverse/dae/releases/download/v2.0.0/dae-linux-arm64.zip
-          unzip -j dae.zip dae-linux-arm64
-          mkdir -p files/usr/bin
-          mv dae-linux-arm64 files/usr/bin/dae
-          chmod +x files/usr/bin/dae
-          rm -f dae.zip
-          
-          #chmod 600 build_dir/target-*/root-*/etc/dae/config.dae
-          #ls -l build_dir/target-*/root-*/etc/dae/config.dae
-          
-#############################测试代码####    
 
       - name: Compile Firmware
         if: env.WRT_TEST != 'true'

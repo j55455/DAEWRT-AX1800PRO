@@ -69,3 +69,24 @@ if [[ $WRT_TARGET == *"QUALCOMMAX"* ]]; then
 		echo "qualcommax set up nowifi successfully!"
 	fi
 fi
+
+# 针对 AX1800 Pro 1GB 内存注入满血网络栈参数与高并发调优
+SYSCTL_CONF="./package/base-files/files/etc/sysctl.conf"
+if [ -f "$SYSCTL_CONF" ]; then
+	cat >> $SYSCTL_CONF << 'EOF'
+
+# 1GB RAM 网络栈调优 (AX1800 Pro)
+net.core.rmem_max = 33554432
+net.core.wmem_max = 33554432
+net.core.rmem_default = 1048576
+net.core.wmem_default = 1048576
+net.ipv4.tcp_rmem = 4096 87380 33554432
+net.ipv4.tcp_wmem = 4096 65536 33554432
+net.core.netdev_max_backlog = 10000
+net.core.somaxconn = 4096
+net.ipv4.tcp_max_syn_backlog = 8192
+net.ipv4.tcp_fastopen = 3
+net.netfilter.nf_conntrack_max = 500000
+EOF
+	echo "AX1800 Pro 1GB sysctl tuning injected!"
+fi
