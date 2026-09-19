@@ -90,3 +90,23 @@ net.netfilter.nf_conntrack_max = 500000
 EOF
 	echo "AX1800 Pro 1GB sysctl tuning injected!"
 fi
+
+# 预置 kenzok8/openwrt-daede 专属更新软件源与公钥（使固件自带 1.28+ 更新通道，更新页面永久可用）
+mkdir -p ./package/base-files/files/etc/apk/keys ./package/base-files/files/etc/apk/repositories.d
+curl -fsSL https://down.dllkids.xyz/openwrt-feed/keys/dllkids-feed.pub.pem -o ./package/base-files/files/etc/apk/keys/dllkids-feed.pub.pem 2>/dev/null || true
+echo "https://down.dllkids.xyz/openwrt-feed/25.12/aarch64_cortex-a53/packages.adb" > ./package/base-files/files/etc/apk/repositories.d/customfeeds.list
+
+mkdir -p ./package/base-files/files/etc/opkg/keys
+curl -fsSL https://down.dllkids.xyz/openwrt-feed/keys/dllkids-feed.pub -o ./package/base-files/files/etc/opkg/keys/dllkids-feed.pub 2>/dev/null || true
+echo "src/gz dllkids_feed https://down.dllkids.xyz/openwrt-feed/24.10/aarch64_cortex-a53" > ./package/base-files/files/etc/opkg/customfeeds.conf
+
+UCI_DEF_FEED="./package/base-files/files/etc/uci-defaults/98-custom-daede-feed"
+mkdir -p "$(dirname "$UCI_DEF_FEED")"
+cat > "$UCI_DEF_FEED" << 'EOF'
+#!/bin/sh
+if [ -f /etc/opkg/keys/dllkids-feed.pub ] && command -v opkg-key >/dev/null 2>&1; then
+	opkg-key add /etc/opkg/keys/dllkids-feed.pub 2>/dev/null || true
+fi
+exit 0
+EOF
+chmod +x "$UCI_DEF_FEED"

@@ -67,8 +67,21 @@ UPDATE_PACKAGE "aurora-config" "eamonxg/luci-app-aurora-config" "master"
 UPDATE_PACKAGE "viking" "VIKINGYFY/packages" "main" "" "axonhub gecoosac sing-box luci-app-homeproxy luci-app-timewol luci-app-wolplus luci-app-wolultra"
 # UPDATE_PACKAGE "vnt" "lmq8267/luci-app-vnt" "main"
 UPDATE_PACKAGE "luci-app-tailscale" "asvow/luci-app-tailscale" "main"
-# 替换为 kenzok8/openwrt-daede 优化套件（PGO/SIMD 加速 + 双内核支持）
-UPDATE_PACKAGE "openwrt-daede" "kenzok8/openwrt-daede" "main"
+
+# 彻底清理系统 feeds 自带的旧版官方 dae/daed 软链接与源码（彻底避免被 1.27 旧版劫持）
+rm -rf ../feeds/packages/net/dae ../feeds/packages/net/daed
+rm -rf ../feeds/luci/applications/luci-app-dae ../feeds/luci/applications/luci-app-daed
+rm -rf ../package/feeds/packages/dae ../package/feeds/packages/daed
+rm -rf ../package/feeds/luci/luci-app-dae ../package/feeds/luci/luci-app-daed
+
+# 平铺引入 kenzok8/openwrt-daede 一体优化套件（直接放置到 package/ 根目录，保证编译 1.28 最新版）
+rm -rf openwrt-daede dae daed luci-app-daede
+git clone --depth=1 https://github.com/kenzok8/openwrt-daede.git
+cp -rf openwrt-daede/dae ./
+cp -rf openwrt-daede/daed ./
+cp -rf openwrt-daede/luci-app-daede ./
+rm -rf openwrt-daede
+
 UPDATE_PACKAGE "luci-app-pushbot" "zzsj0928/luci-app-pushbot" "master"
 UPDATE_PACKAGE "luci-app-easytier" "EasyTier/luci-app-easytier" "main"
 # UPDATE_PACKAGE "easytier" "EasyTier/luci-app-easytier" "main"
@@ -126,8 +139,10 @@ UPDATE_VERSION() {
 # sed -i 's/+xray-core//' luci-app-passwall2/Makefile
 
 # #删除官方的默认插件
-rm -rf ../feeds/luci/applications/luci-app-{passwall*,mosdns,dockerman,dae*,bypass*}
-rm -rf ../feeds/packages/net/{dae*}
+rm -rf ../feeds/luci/applications/luci-app-passwall* ../feeds/luci/applications/luci-app-mosdns ../feeds/luci/applications/luci-app-dockerman ../feeds/luci/applications/luci-app-dae* ../feeds/luci/applications/luci-app-bypass*
+rm -rf ../feeds/packages/net/dae ../feeds/packages/net/daed
+rm -rf ../package/feeds/packages/dae ../package/feeds/packages/daed
+rm -rf ../package/feeds/luci/luci-app-dae ../package/feeds/luci/luci-app-daed
 #rm -rf ../feeds/packages/net/{v2ray-geodata,dae*}
 
 # #更新golang为最新版
