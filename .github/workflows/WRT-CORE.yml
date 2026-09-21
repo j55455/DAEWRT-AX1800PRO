@@ -148,13 +148,17 @@ jobs:
         if: env.WRT_VARIANT == 'daed'
         run: |
          cd ./wrt
-         mkdir -p files/usr/share/dae files/usr/share/v2ray
+         mkdir -p files/usr/share/dae files/usr/share/daed files/usr/share/v2ray
          wget -O files/usr/share/v2ray/geoip.dat https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geoip.dat
          wget -O files/usr/share/v2ray/geosite.dat https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geosite.dat
          cd files/usr/share
          ln -sf ../v2ray/geoip.dat dae/geoip.dat
          ln -sf ../v2ray/geosite.dat dae/geosite.dat
-         ln -sf dae daed
+         # 不能把 /usr/share/daed 做成指向 dae 的目录软链接：kenzok8 的 daed 包会安装
+         # /usr/share/daed/cleanup.sh（真实目录），files/ 覆盖时会报
+         # "cp: cannot overwrite directory .../usr/share/daed with non-directory"
+         ln -sf ../v2ray/geoip.dat daed/geoip.dat
+         ln -sf ../v2ray/geosite.dat daed/geosite.dat
          ls -l
 
 
