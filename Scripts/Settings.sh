@@ -92,19 +92,27 @@ EOF
 fi
 
 # 预置 kenzok8/openwrt-daede 专属更新软件源与公钥（仅 daed 变体，使固件自带 1.28+ 更新通道）
+# 注意：/etc/apk/repositories.d/customfeeds.list 已由 apk-openssl 包提供，
+# 若再作为静态文件塞进 base-files，rootfs 安装阶段会报
+# "ERROR: base-files: trying to overwrite etc/apk/repositories.d/customfeeds.list owned by apk-openssl"
+# 导致 package/install 失败，因此改为首次启动时追加写入。
 if [ "${WRT_VARIANT:-daed}" = "daed" ]; then
-	mkdir -p ./package/base-files/files/etc/apk/keys ./package/base-files/files/etc/apk/repositories.d
+	mkdir -p ./package/base-files/files/etc/apk/keys ./package/base-files/files/etc/opkg/keys
 	curl -fsSL https://down.dllkids.xyz/openwrt-feed/keys/dllkids-feed.pub.pem -o ./package/base-files/files/etc/apk/keys/dllkids-feed.pub.pem 2>/dev/null || true
-	echo "https://down.dllkids.xyz/openwrt-feed/25.12/aarch64_cortex-a53/packages.adb" > ./package/base-files/files/etc/apk/repositories.d/customfeeds.list
-
-	mkdir -p ./package/base-files/files/etc/opkg/keys
 	curl -fsSL https://down.dllkids.xyz/openwrt-feed/keys/dllkids-feed.pub -o ./package/base-files/files/etc/opkg/keys/dllkids-feed.pub 2>/dev/null || true
-	echo "src/gz dllkids_feed https://down.dllkids.xyz/openwrt-feed/24.10/aarch64_cortex-a53" > ./package/base-files/files/etc/opkg/customfeeds.conf
 
 	UCI_DEF_FEED="./package/base-files/files/etc/uci-defaults/98-custom-daede-feed"
 	mkdir -p "$(dirname "$UCI_DEF_FEED")"
 	cat > "$UCI_DEF_FEED" << 'EOF'
 #!/bin/sh
+APK_FEED="https://down.dllkids.xyz/openwrt-feed/25.12/aarch64_cortex-a53/packages.adb"
+OPKG_FEED="src/gz dllkids_feed https://down.dllkids.xyz/openwrt-feed/24.10/aarch64_cortex-a53"
+if [ -d /etc/apk/repositories.d ]; then
+	grep -q dllkids /etc/apk/repositories.d/customfeeds.list 2>/dev/null || echo "$APK_FEED" >> /etc/apk/repositories.d/customfeeds.list
+fi
+if [ -d /etc/opkg ]; then
+	grep -q dllkids_feed /etc/opkg/customfeeds.conf 2>/dev/null || echo "$OPKG_FEED" >> /etc/opkg/customfeeds.conf
+fi
 if [ -f /etc/opkg/keys/dllkids-feed.pub ] && command -v opkg-key >/dev/null 2>&1; then
 	opkg-key add /etc/opkg/keys/dllkids-feed.pub 2>/dev/null || true
 fi
