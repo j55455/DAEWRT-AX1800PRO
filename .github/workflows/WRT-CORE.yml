@@ -40,6 +40,9 @@ on:
       WRT_TEST:
         required: false
         type: string
+      WRT_VARIANT:
+        required: false
+        type: string
       CI_NAME:
         required: false
         type: string
@@ -59,6 +62,7 @@ env:
   WRT_BRANCH: ${{inputs.WRT_BRANCH}}
   WRT_PACKAGE: ${{inputs.WRT_PACKAGE}}
   WRT_TEST: ${{inputs.WRT_TEST}}
+  WRT_VARIANT: ${{inputs.WRT_VARIANT || 'daed'}}
   WRT_DIR: 'wrt'
   CI_NAME: ${{inputs.CI_NAME}}
   WRT_ARCH: ${{inputs.WRT_ARCH}}
@@ -112,7 +116,11 @@ jobs:
         run: |
           echo "WRT_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
           echo "WRT_MARK=$(echo $GITHUB_REPOSITORY | cut -d '/' -f 1)" >> $GITHUB_ENV
-          echo "WRT_VER=$(echo $WRT_REPO | cut -d '/' -f 4)-$WRT_BRANCH" >> $GITHUB_ENV
+          if [[ $WRT_VARIANT == 'daed' ]]; then
+            echo "WRT_VER=$(echo $WRT_REPO | cut -d '/' -f 4)-$WRT_BRANCH" >> $GITHUB_ENV
+          else
+            echo "WRT_VER=$(echo $WRT_REPO | cut -d '/' -f 4)-$WRT_BRANCH-$WRT_VARIANT" >> $GITHUB_ENV
+          fi
           echo "WRT_TARGET=$(grep -m 1 -oP '^CONFIG_TARGET_\K[\w]+(?=\=y)' ./Config/$WRT_CONFIG.txt | tr '[:lower:]' '[:upper:]')" >> $GITHUB_ENV
           echo "WRT_KVER=none" >> $GITHUB_ENV
           echo "WRT_LIST=none" >> $GITHUB_ENV
@@ -122,7 +130,12 @@ jobs:
             export WRT_ARCH=$(sed -n 's/.*_DEVICE_\(.*\)_DEVICE_.*/\1/p' $GITHUB_WORKSPACE/Config/$WRT_CONFIG.txt | head -n 1)
             echo "WRT_ARCH=$WRT_ARCH" >> $GITHUB_ENV
           }
-          echo "$WRT_REPO/$WRT_BRANCH" > "$GITHUB_WORKSPACE/repo_flag"
+          # 缓存隔离：daed 变体沿用原有缓存键，其它变体单独一套缓存，避免互相删除
+          if [[ $WRT_VARIANT == 'daed' ]]; then
+            echo "$WRT_REPO/$WRT_BRANCH" > "$GITHUB_WORKSPACE/repo_flag"
+          else
+            echo "$WRT_REPO/$WRT_BRANCH/$WRT_VARIANT" > "$GITHUB_WORKSPACE/repo_flag"
+          fi
       - name: Clone Code
         run: |
           git clone --depth=1 --single-branch --branch $WRT_BRANCH $WRT_REPO ./wrt/
@@ -132,6 +145,7 @@ jobs:
 
 #############################测试代码####
       - name: Update Dae/Daed rules
+        if: env.WRT_VARIANT == 'daed'
         run: |
          cd ./wrt
          mkdir -p files/usr/share/dae files/usr/share/v2ray
@@ -273,6 +287,7 @@ jobs:
             提交：${{env.WRT_HASH}}
 
             配置：${{env.WRT_CONFIG}}
+            变体：${{env.WRT_VARIANT}}
             平台：${{env.WRT_TARGET}}
 
             登录地址：${{env.WRT_IP}}

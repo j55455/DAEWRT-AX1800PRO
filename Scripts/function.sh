@@ -135,6 +135,15 @@ function generate_config() {
   cat $GITHUB_WORKSPACE/Config/${WRT_CONFIG}.txt $GITHUB_WORKSPACE/Config/GENERAL.txt  > $config_file
   local target=$(echo $WRT_ARCH | cut -d'_' -f2)
 
+  #变体：daed（默认，编入 dae+daed）/ mosdns（不编入 dae+daed，改编入 mosdns+nikki）
+  if [ "${WRT_VARIANT:-daed}" != "daed" ]; then
+    echo "Variant ${WRT_VARIANT}: removing dae/daed package selection"
+    sed -i -E '/^CONFIG_PACKAGE_(dae|daed|luci-app-daede|luci-app-daede_daed)=/d' $config_file
+    if [ -f "$GITHUB_WORKSPACE/Config/VARIANT-${WRT_VARIANT^^}.txt" ]; then
+      cat "$GITHUB_WORKSPACE/Config/VARIANT-${WRT_VARIANT^^}.txt" >> $config_file
+    fi
+  fi
+
   #删除wifi依赖
   if [[ "$WRT_CONFIG" == *"NOWIFI"* ]]; then
     remove_wifi $target

@@ -74,13 +74,115 @@ rm -rf ../feeds/luci/applications/luci-app-dae ../feeds/luci/applications/luci-a
 rm -rf ../package/feeds/packages/dae ../package/feeds/packages/daed
 rm -rf ../package/feeds/luci/luci-app-dae ../package/feeds/luci/luci-app-daed
 
-# 平铺引入 kenzok8/openwrt-daede 一体优化套件（直接放置到 package/ 根目录，保证编译 1.28 最新版）
-rm -rf openwrt-daede dae daed luci-app-daede
-git clone --depth=1 https://github.com/kenzok8/openwrt-daede.git
-cp -rf openwrt-daede/dae ./
-cp -rf openwrt-daede/daed ./
-cp -rf openwrt-daede/luci-app-daede ./
-rm -rf openwrt-daede
+# ==================== 固件变体 ====================
+# daed  : 编入 kenzok8/openwrt-daede 优化套件（dae + daed + luci-app-daede），默认
+# mosdns: 不编入 dae/daed，改编入 sbwml mosdns + nikki(mihomo)
+VARIANT="${WRT_VARIANT:-daed}"
+echo "Package variant: $VARIANT"
+
+# kenzok8/openwrt-daede 的 dae-src / daed-src 是滚动 release，
+# 上游更新后会删除/替换旧源码包，而 Makefile 里固定了具体文件名与哈希，
+# 一旦被删下载就 404，直接导致 package/dae、package/daed 构建失败。
+# 这里在构建时用 GitHub API 解析仍然可用的源码包：优先沿用 Makefile 里固定的那个，
+# 失效则回退到 release 中最新的，预下载到 dl/ 并用真实 sha256 改写 Makefile。
+FIX_DAEDE_SOURCE() {
+	local NAME="$1"
+	local TAG="$2"
+	local MAKEFILE="$3"
+
+	if [ ! -f "$MAKEFILE" ]; then
+		echo "[$NAME] $MAKEFILE not found, skip source fix"
+		return 0
+	fi
+
+	local PINNED=$(sed -n 's/^PKG_SOURCE:=//p' "$MAKEFILE" | head -n 1)
+	local API="https://api.github.com/repos/kenzok8/openwrt-daede/releases/tags/$TAG"
+	local JSON=""
+
+	if [ -n "$GITHUB_TOKEN" ]; then
+		JSON=$(curl -fsSL --connect-timeout 10 --retry 3 -H "Authorization: Bearer $GITHUB_TOKEN" "$API" 2>/dev/null || true)
+	fi
+	[ -n "$JSON" ] || JSON=$(curl -fsSL --connect-timeout 10 --retry 3 "$API" 2>/dev/null || true)
+	if [ -z "$JSON" ]; then
+		echo "[$NAME] WARN: cannot query $API, keep pinned source: $PINNED"
+		return 0
+	fi
+
+	local AVAILABLE=$(echo "$JSON" | jq -r --arg pre "${NAME}-src-" \
+		'[.assets[] | select((.name | startswith($pre)) and (.name | endswith(".tar.gz")))]
+		 | sort_by(.created_at) | reverse | .[].name')
+	if [ -z "$AVAILABLE" ]; then
+		echo "[$NAME] WARN: no source asset in release $TAG, keep pinned source: $PINNED"
+		return 0
+	fi
+
+	local CANDIDATES="$AVAILABLE"
+	if echo "$AVAILABLE" | grep -qx -- "$PINNED"; then
+		echo "[$NAME] pinned source still available: $PINNED"
+		CANDIDATES=$(printf '%s\n%s\n' "$PINNED" "$AVAILABLE" | awk '!seen[$0]++')
+	else
+		echo "[$NAME] pinned source is gone: $PINNED"
+		echo "[$NAME] fallback candidates: $(echo $AVAILABLE | tr '\n' ' ')"
+	fi
+
+	mkdir -p ../dl
+	local ASSET URL FILE VER HASH ROOT
+	while read -r ASSET; do
+		[ -n "$ASSET" ] || continue
+		URL="https://github.com/kenzok8/openwrt-daede/releases/download/$TAG/$ASSET"
+		FILE="../dl/$ASSET"
+		echo "[$NAME] downloading: $URL"
+		if ! curl -fL --connect-timeout 15 --retry 3 --retry-delay 2 -o "$FILE" "$URL"; then
+			echo "[$NAME] download failed: $ASSET"
+			rm -f "$FILE"
+			continue
+		fi
+		HASH=$(sha256sum "$FILE" | cut -d' ' -f1)
+		ROOT=$(tar -tzf "$FILE" 2>/dev/null | head -n 1 | cut -d'/' -f1)
+		VER=$(echo "$ROOT" | sed -E "s/^${NAME}-//")
+		case "$VER" in
+			''|"$ROOT") VER=$(echo "$ASSET" | sed -E "s/^${NAME}-src-([0-9.]+)-[0-9a-f]+\.tar\.gz$/\1/") ;;
+		esac
+		sed -i "s|^PKG_VERSION:=.*|PKG_VERSION:=$VER|" "$MAKEFILE"
+		sed -i "s|^PKG_SOURCE:=.*|PKG_SOURCE:=$ASSET|" "$MAKEFILE"
+		sed -i "s|^PKG_HASH:=.*|PKG_HASH:=$HASH|" "$MAKEFILE"
+		echo "[$NAME] source fixed -> $ASSET (version=$VER sha256=$HASH)"
+		return 0
+	done <<< "$CANDIDATES"
+
+	echo "[$NAME] ERROR: all candidate source assets failed to download"
+	return 1
+}
+
+if [ "$VARIANT" = "daed" ]; then
+	# 平铺引入 kenzok8/openwrt-daede 一体优化套件（直接放置到 package/ 根目录，保证编译 1.28 最新版）
+	rm -rf openwrt-daede dae daed luci-app-daede vmlinux-btf
+	git clone --depth=1 https://github.com/kenzok8/openwrt-daede.git
+	cp -rf openwrt-daede/dae ./
+	cp -rf openwrt-daede/daed ./
+	cp -rf openwrt-daede/luci-app-daede ./
+	# daed/dae 的 Makefile 带条件依赖 +DAED_USE_VMLINUX_BTF:vmlinux-btf：
+	# 内核若未集成 BTF 会走独立 BTF 包，这里一并引入避免依赖缺失
+	cp -rf openwrt-daede/vmlinux-btf ./
+	rm -rf openwrt-daede
+
+	FIX_DAEDE_SOURCE "dae" "dae-src" "dae/Makefile"
+	FIX_DAEDE_SOURCE "daed" "daed-src" "daed/Makefile"
+else
+	# mosdns + nikki 变体：不引入 dae/daed
+	# feeds 自带 mosdns / v2ray-geodata 与 sbwml 版本包名重叠，会 duplicate package，必须先删除
+	rm -rf ../feeds/packages/net/mosdns ../feeds/packages/net/v2ray-geodata
+	rm -rf ../package/feeds/packages/mosdns ../package/feeds/packages/v2ray-geodata
+	rm -rf ../feeds/luci/applications/luci-app-mosdns ../feeds/luci/applications/luci-app-nikki
+	rm -rf ../package/feeds/luci/luci-app-mosdns ../package/feeds/luci/luci-app-nikki
+	rm -rf luci-app-mosdns v2ray-geodata OpenWrt-nikki
+
+	# luci-app-mosdns(v5) 仓库同时提供 mosdns 内核与 geo2txt
+	UPDATE_PACKAGE "mosdns" "sbwml/luci-app-mosdns" "v5"
+	UPDATE_PACKAGE "v2ray-geodata" "sbwml/v2ray-geodata" "master"
+	# nikki 仓库同时提供 mihomo 内核、nikki 与 luci-app-nikki
+	UPDATE_PACKAGE "nikki" "nikkinikki-org/OpenWrt-nikki" "main"
+fi
 
 UPDATE_PACKAGE "luci-app-pushbot" "zzsj0928/luci-app-pushbot" "master"
 UPDATE_PACKAGE "luci-app-easytier" "EasyTier/luci-app-easytier" "main"
