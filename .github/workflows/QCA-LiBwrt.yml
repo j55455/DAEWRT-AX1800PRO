@@ -3,12 +3,7 @@ name: QCA-LiBwrt
 
 #CI计划
 on:
-  #自动编译：当Auto-Clean运行完成后
-  workflow_run:
-    workflows: ["Auto-Clean"]
-    types:
-       - completed
-  #手动编译
+  #手动编译（备用 daed 变体，仅在需要时手动触发，节省周常 CI 资源）
   workflow_dispatch:
     inputs:
       PACKAGE:

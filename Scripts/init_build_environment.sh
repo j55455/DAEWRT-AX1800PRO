@@ -202,7 +202,7 @@ function install_dependencies() {
 		zlib1g-dev zstd xxd $VERSION_PACKAGE
 
 	# fix broken http2 support for curl on buster
-	if [ "$VERSION_CODENAME" == "buster"]; then
+	if [ "$VERSION_CODENAME" == "buster" ]; then
 		apt full-upgrade -y
 		apt reinstall -y libcurl3-gnutls/buster
 	fi

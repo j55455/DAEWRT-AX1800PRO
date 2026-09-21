@@ -2,10 +2,8 @@ name: Cache-Clean
 
 on:
   schedule:
-    #每周一4:00
-    - cron: 0 20 * * 0
-    #每天4:00
-    #- cron: 0 20 * * *
+    # 每月1号4:00 (UTC 20:00) 独立清理全部缓存，不串联周常编译
+    - cron: 0 20 1 * *
   workflow_dispatch:
 
 permissions: write-all
