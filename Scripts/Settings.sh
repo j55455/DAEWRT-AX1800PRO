@@ -75,20 +75,57 @@ SYSCTL_CONF="./package/base-files/files/etc/sysctl.conf"
 if [ -f "$SYSCTL_CONF" ]; then
 	cat >> $SYSCTL_CONF << 'EOF'
 
-# 1GB RAM 网络栈调优 (AX1800 Pro)
+# 1GB RAM 网络栈与高并发代理调优 (AX1800 Pro)
 net.core.rmem_max = 33554432
 net.core.wmem_max = 33554432
-net.core.rmem_default = 1048576
-net.core.wmem_default = 1048576
+net.core.rmem_default = 262144
+net.core.wmem_default = 262144
 net.ipv4.tcp_rmem = 4096 87380 33554432
 net.ipv4.tcp_wmem = 4096 65536 33554432
 net.core.netdev_max_backlog = 10000
 net.core.somaxconn = 4096
 net.ipv4.tcp_max_syn_backlog = 8192
 net.ipv4.tcp_fastopen = 3
+net.ipv4.tcp_slow_start_after_idle = 0
+net.ipv4.tcp_tw_reuse = 1
+net.ipv4.tcp_fin_timeout = 15
+net.ipv4.tcp_notsent_lowat = 16384
 net.netfilter.nf_conntrack_max = 500000
+net.core.bpf_jit_enable = 1
+net.core.bpf_jit_harden = 0
+vm.min_free_kbytes = 32768
+vm.vfs_cache_pressure = 50
 EOF
 	echo "AX1800 Pro 1GB sysctl tuning injected!"
+fi
+
+# 注入启动期硬件与中断优化（rc.local 每次开机均执行）
+RC_LOCAL="./package/base-files/files/etc/rc.local"
+if [ -f "$RC_LOCAL" ]; then
+	sed -i '/^exit 0/d' "$RC_LOCAL"
+	cat >> "$RC_LOCAL" << 'EOF'
+
+# 优化连接跟踪哈希桶深度（配合 500000 连接上限建立 131072 桶，降低软中断链表遍历开销）
+[ -e /sys/module/nf_conntrack/parameters/hashsize ] && echo 131072 > /sys/module/nf_conntrack/parameters/hashsize
+
+# 为所有网卡队列开启 4 核软中断并发处理 (RPS，分担 host CPU 代理与非卸载流量)
+for q in /sys/class/net/*/queues/rx-*; do
+	[ -e "$q/rps_cpus" ] && echo "f" > "$q/rps_cpus"
+done
+
+exit 0
+EOF
+	echo "AX1800 Pro rc.local boot tuning injected!"
+fi
+
+# Samba4 局域网千兆传输性能调优与 root 登录预设
+SAMBA_TEMPLATE=$(find ./feeds/packages/net/samba4/ -type f -name "smb.conf.template" 2>/dev/null)
+if [ -f "$SAMBA_TEMPLATE" ]; then
+	sed -i 's/invalid users = root/# invalid users = root/g' "$SAMBA_TEMPLATE"
+	sed -i 's/#use sendfile = yes/use sendfile = yes/g' "$SAMBA_TEMPLATE"
+	sed -i 's/#aio read size = 0/aio read size = 1/g' "$SAMBA_TEMPLATE"
+	sed -i 's/#aio write size = 0/aio write size = 1/g' "$SAMBA_TEMPLATE"
+	echo "Samba4 template tuned for AX1800 Pro!"
 fi
 
 # 预置 kenzok8/openwrt-daede 专属更新软件源与公钥（仅 daed 变体，使固件自带 1.28+ 更新通道）
