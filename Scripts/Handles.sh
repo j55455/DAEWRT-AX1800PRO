@@ -63,3 +63,22 @@ if [ -n "$RUST_FILE" ] && [ -f "$RUST_FILE" ]; then
 
 	cd $PKG_PATH && echo "rust has been fixed!"
 fi
+
+#修改argon主题字体和配色
+ARGON_CONF=$(find ./ ../feeds/luci/ -maxdepth 5 -type f -wholename "*/luci-app-argon-config/root/etc/config/argon" 2>/dev/null | head -n 1)
+if [ -n "$ARGON_CONF" ] && [ -f "$ARGON_CONF" ]; then
+	echo " "
+	if sed -i "s/primary '.*'/primary '#31a1a1'/g; s/'0.2'/'0.5'/g; s/'none'/'bing'/g; s/'600'/'normal'/g" "$ARGON_CONF"; then
+		cd $PKG_PATH && echo "theme-argon has been fixed!"
+	fi
+fi
+
+#修改aurora菜单式样与圆角
+AURORA_DIR=$(find ./ ../feeds/luci/ -maxdepth 5 -type d -wholename "*/luci-app-aurora-config/root/usr/share/aurora" 2>/dev/null | head -n 1)
+if [ -n "$AURORA_DIR" ] && [ -d "$AURORA_DIR" ]; then
+	echo " "
+	if find "$AURORA_DIR" -type f -name '*.template' -exec \
+		sed -i "s/nav_type '.*'/nav_type 'dropdown'/g; s/struct_radius_base '.*'/struct_radius_base '0.125rem'/g" {} +; then
+		cd $PKG_PATH && echo "theme-aurora has been fixed!"
+	fi
+fi

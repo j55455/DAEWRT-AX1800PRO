@@ -14,17 +14,17 @@ WIFI_UC="./package/network/config/wifi-scripts/files/lib/wifi/mac80211.uc"
 if [ -f "$WIFI_SH" ]; then
 	#修改WIFI名称
 	sed -i "s/BASE_SSID='.*'/BASE_SSID='$WRT_SSID'/g" $WIFI_SH
-	#修改WIFI密码
-	sed -i "s/BASE_WORD='.*'/BASE_WORD='$WRT_WORD'/g" $WIFI_SH
+	#开放网络不设密码
+	sed -i "s/BASE_WORD='.*'/BASE_WORD=''/g" $WIFI_SH
+	sed -i "s/BASE_ENC='.*'/BASE_ENC='none'/g" $WIFI_SH
 elif [ -f "$WIFI_UC" ]; then
 	#修改WIFI名称
 	sed -i "s/ssid='.*'/ssid='$WRT_SSID'/g" $WIFI_UC
-	#修改WIFI密码
-	sed -i "s/key='.*'/key='$WRT_WORD'/g" $WIFI_UC
 	#修改WIFI地区
 	sed -i "s/country='.*'/country='AU'/g" $WIFI_UC
-	#修改WIFI加密
-	sed -i "s/encryption='.*'/encryption='psk2+ccmp'/g" $WIFI_UC
+	#开放网络不设密码
+	sed -i "s/encryption='.*'/encryption='none'/g" $WIFI_UC
+	sed -i "/key=/d" $WIFI_UC
 fi
 
 CFG_FILE="./package/base-files/files/bin/config_generate"
@@ -123,10 +123,66 @@ for gov in /sys/devices/system/cpu/cpufreq/policy*/scaling_governor; do
 	[ -e "$gov" ] && echo "performance" > "$gov"
 done
 
+# 守卫：防止 Nikki bypass 掉回 0（杜绝页面误保存或订阅更新覆写）
+if [ -f /etc/config/nikki ]; then
+	[ "$(uci -q get nikki.proxy.bypass_china_mainland_ip)" != "1" ] && {
+		uci -q set nikki.proxy.bypass_china_mainland_ip='1'
+		uci -q set nikki.proxy.bypass_china_mainland_ip6='1'
+		uci -q commit nikki
+		/etc/init.d/nikki reload >/dev/null 2>&1
+	}
+fi
+
 exit 0
 EOF
 	echo "AX1800 Pro rc.local boot tuning injected!"
 fi
+
+# 固化 Nikki 出厂默认绕过大陆 IP，杜绝国内流量掉入 TUN 网卡
+for f in $(find ./ -type f -name "nikki.conf" 2>/dev/null); do
+	sed -i "s/option 'bypass_china_mainland_ip' '0'/option 'bypass_china_mainland_ip' '1'/g" "$f"
+	sed -i "s/option 'bypass_china_mainland_ip6' '0'/option 'bypass_china_mainland_ip6' '1'/g" "$f"
+	echo "Patched $f: bypass_china_mainland_ip defaulted to 1"
+done
+
+# 注入首次开机出厂预设（流表全硬件加速、4核软中断均衡、WAN MTU 1492、开放WiFi、Nikki出厂直连）
+mkdir -p ./package/base-files/files/etc/uci-defaults
+cat > ./package/base-files/files/etc/uci-defaults/99-jdc-defaults << 'EOF'
+#!/bin/sh
+# 1. 激活 4 核心网卡软中断均衡 (RPS)
+uci -q set network.globals.packet_steering='1'
+
+# 2. 固化 WAN 口 MTU 为 1492，贴合上级光猫 PPPoE 路径消除分片
+uci -q set network.wan.mtu='1492'
+
+# 3. 激活防火墙全硬件流表加速 (Flow Offloading)
+uci -q set firewall.@defaults[0].flow_offloading='1'
+uci -q set firewall.@defaults[0].flow_offloading_hw='1'
+
+# 4. 确保 WAN 口开启 TCP MSS 自动规约 (MSS Clamping)
+uci -q set firewall.@zone[1].mtu_fix='1'
+
+# 5. 确保 WiFi 无线为开放网络，无密码
+for w in $(uci -q show wireless | grep '=wifi-iface' | cut -d'.' -f2 | cut -d'=' -f1); do
+	uci -q set wireless.${w}.ssid='qf'
+	uci -q set wireless.${w}.encryption='none'
+	uci -q del wireless.${w}.key
+done
+
+# 6. 固化 Nikki 大陆 IP 直连 bypass，彻底杜绝回退到单核 TUN
+if [ -f /etc/config/nikki ]; then
+	uci -q set nikki.proxy.bypass_china_mainland_ip='1'
+	uci -q set nikki.proxy.bypass_china_mainland_ip6='1'
+	uci -q commit nikki
+fi
+
+uci -q commit network
+uci -q commit firewall
+uci -q commit wireless
+exit 0
+EOF
+chmod +x ./package/base-files/files/etc/uci-defaults/99-jdc-defaults
+echo "AX1800 Pro 99-jdc-defaults injected!"
 
 # Samba4 局域网千兆传输性能调优与 root 登录预设
 SAMBA_TEMPLATE=$(find ./feeds/packages/net/samba4/ -type f -name "smb.conf.template" 2>/dev/null)
