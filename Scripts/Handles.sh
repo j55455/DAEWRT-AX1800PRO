@@ -78,7 +78,31 @@ AURORA_DIR=$(find ./ ../feeds/luci/ -maxdepth 5 -type d -wholename "*/luci-app-a
 if [ -n "$AURORA_DIR" ] && [ -d "$AURORA_DIR" ]; then
 	echo " "
 	if find "$AURORA_DIR" -type f -name '*.template' -exec \
-		sed -i "s/nav_type '.*'/nav_type 'dropdown'/g; s/struct_radius_base '.*'/struct_radius_base '0.125rem'/g" {} +; then
-		cd $PKG_PATH && echo "theme-aurora has been fixed!"
+		sed -i "s/struct_radius_base '.*'/struct_radius_base '0.125rem'/g" {} +; then
+		cd $PKG_PATH && echo "theme-aurora templates tuned!"
 	fi
 fi
+
+#修复aurora主题设计studio.js样式表解析器超时与背景输入无效Bug（消除iframe死锁并放行合规Hex颜色）
+for f in $(find ./ ../feeds/ -type f -name "studio.js" 2>/dev/null | grep -E "aurora/studio\.js"); do
+	python3 -c "
+import sys
+p = sys.argv[1]
+with open(p, 'r', encoding='utf-8') as f:
+    c = f.read()
+
+old1 = 'n&&o?o.sheet?i():(o.addEventListener(\"load\",i,{once:!0}),o.addEventListener(\"error\",()=>{window.clearTimeout(a),t(new Error(_(\"Unable to load the Aurora stylesheet.\")))},{once:!0})):(window.clearTimeout(a),t(new Error(_(\"Unable to create the theme color resolver.\"))))'
+new1 = '(()=>{const _c=()=>(!n||!o||o.sheet)?(i(),!0):!1;if(!_c()){let _k=0;const _tm=setInterval(()=>{_k++;(_c()||_k>20)&&(clearInterval(_tm),i())},25);o.addEventListener(\"load\",()=>{clearInterval(_tm),i()},{once:!0}),o.addEventListener(\"error\",()=>{clearInterval(_tm),i()},{once:!0})}})()'
+
+old2 = 'validate:(e,t,r)=>{if(!r?.trim())return!0;'
+new2 = 'validate:(e,t,r)=>{if(!r?.trim()||/^#[0-9a-fA-F]{3,8}$/.test(r.trim()))return!0;'
+
+if old1 in c and old2 in c:
+    c = c.replace(old1, new1).replace(old2, new2)
+    with open(p, 'w', encoding='utf-8') as f:
+        f.write(c)
+    print('theme-aurora studio.js successfully patched: ' + p)
+else:
+    print('theme-aurora studio.js signature mismatch in ' + p)
+" "$f"
+done
