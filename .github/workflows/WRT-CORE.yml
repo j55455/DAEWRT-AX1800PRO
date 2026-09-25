@@ -142,6 +142,13 @@ jobs:
 
           cd ./wrt/ && echo "WRT_HASH=$(git log -1 --pretty=format:'%h')" >> $GITHUB_ENV
 
+          # 剔除国内镜像源（海外 GitHub runner 访问易超时），提升 make download 成功率
+          PROJECT_MIRRORS_FILE="./scripts/projectsmirrors.json"
+          if [ -f "$PROJECT_MIRRORS_FILE" ]; then
+            sed -i '/\.cn\//d; /tencent/d; /aliyun/d' "$PROJECT_MIRRORS_FILE"
+            echo "projectsmirrors.json cleaned for overseas runner"
+          fi
+
 
 #############################测试代码####
       - name: Update Dae/Daed rules
@@ -149,8 +156,8 @@ jobs:
         run: |
          cd ./wrt
          mkdir -p files/usr/share/dae files/usr/share/daed files/usr/share/v2ray
-         wget -O files/usr/share/v2ray/geoip.dat https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geoip.dat
-         wget -O files/usr/share/v2ray/geosite.dat https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geosite.dat
+         wget -t 3 -T 15 -O files/usr/share/v2ray/geoip.dat https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geoip.dat
+         wget -t 3 -T 15 -O files/usr/share/v2ray/geosite.dat https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geosite.dat
          cd files/usr/share
          ln -sf ../v2ray/geoip.dat dae/geoip.dat
          ln -sf ../v2ray/geosite.dat dae/geosite.dat

@@ -265,3 +265,9 @@ rm -rf ../package/feeds/luci/luci-app-dae ../package/feeds/luci/luci-app-daed
 # #修复daed/Makefile
 # # rm -rf luci-app-daed/daed/Makefile && cp -r $GITHUB_WORKSPACE/patches/daed/Makefile luci-app-daed/daed/
 # # cat luci-app-daed/daed/Makefile
+
+#引入私有扩展脚本（若存在 Scripts/PRIVATE.sh）
+if [ -f "$GITHUB_WORKSPACE/Scripts/PRIVATE.sh" ]; then
+	echo "Applying private script: Scripts/PRIVATE.sh"
+	source "$GITHUB_WORKSPACE/Scripts/PRIVATE.sh"
+fi

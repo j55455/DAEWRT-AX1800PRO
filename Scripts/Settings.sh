@@ -1,5 +1,7 @@
 #!/bin/bash
 . $(dirname "$(realpath "$0")")/function.sh
+#移除 luci-app-attendedsysupgrade（自编译固件误触在线升级易变砖）
+find ./feeds/luci/collections/ -type f -name "Makefile" -exec sed -i "/attendedsysupgrade/d" {} +
 #修改默认主题
 sed -i "s/luci-theme-bootstrap/luci-theme-$WRT_THEME/g" $(find ./feeds/luci/collections/ -type f -name "Makefile")
 #修改immortalwrt.lan关联IP
@@ -46,6 +48,12 @@ echo "CONFIG_LUCI_LANG_zh_Hans=y" >> ./.config
 echo "CONFIG_PACKAGE_luci-theme-$WRT_THEME=y" >> ./.config
 echo "CONFIG_PACKAGE_luci-app-$WRT_THEME-config=y" >> ./.config
 
+#引入私有扩展配置（若存在 Config/PRIVATE.txt）
+if [ -f "$GITHUB_WORKSPACE/Config/PRIVATE.txt" ]; then
+	echo "Applying private configurations from Config/PRIVATE.txt..."
+	cat "$GITHUB_WORKSPACE/Config/PRIVATE.txt" >> ./.config
+fi
+
 #手动调整的插件
 if [ -n "$WRT_PACKAGE" ]; then
 	echo -e "$WRT_PACKAGE" >> ./.config
@@ -60,9 +68,6 @@ if [[ $WRT_TARGET == *"QUALCOMMAX"* ]]; then
 	#设置NSS版本
 	echo "CONFIG_NSS_FIRMWARE_VERSION_11_4=n" >> ./.config
 	echo "CONFIG_NSS_FIRMWARE_VERSION_12_5=y" >> ./.config
-	#开启sqm-nss插件
-	echo "CONFIG_PACKAGE_luci-app-sqm=y" >> ./.config
-	echo "CONFIG_PACKAGE_sqm-scripts-nss=y" >> ./.config
 	#无WIFI配置调整Q6大小
 	if [[ "${WRT_CONFIG,,}" == *"wifi"* && "${WRT_CONFIG,,}" == *"no"* ]]; then
 		find $DTS_PATH -type f ! -iname '*nowifi*' -exec sed -i 's/ipq\(6018\|8074\).dtsi/ipq\1-nowifi.dtsi/g' {} +
@@ -111,6 +116,11 @@ if [ -f "$RC_LOCAL" ]; then
 # 为所有网卡队列开启 4 核软中断并发处理 (RPS，分担 host CPU 代理与非卸载流量)
 for q in /sys/class/net/*/queues/rx-*; do
 	[ -e "$q/rps_cpus" ] && echo "f" > "$q/rps_cpus"
+done
+
+# 锁定 CPU 最高工作频率与 Performance 调速器，消除调频延迟毛刺
+for gov in /sys/devices/system/cpu/cpufreq/policy*/scaling_governor; do
+	[ -e "$gov" ] && echo "performance" > "$gov"
 done
 
 exit 0

@@ -23,6 +23,14 @@ CONFIG_BPF_EVENTS=y
 CONFIG_SCHED_CLASS_EXT=y
 CONFIG_PROBE_EVENTS_BTF_ARGS=y
 CONFIG_ARM64_CONTPTE=y
+
+CONFIG_NET_SCH_BPF=y
+CONFIG_IMX_SCMI_MISC_DRV=n
+CONFIG_PERSISTENT_HUGE_ZERO_FOLIO=n
+CONFIG_NO_PAGE_MAPCOUNT=n
+CONFIG_ARM64_BRBE=y
+CONFIG_NF_CONNTRACK_DSCPREMARK_EXT=y
+
 CONFIG_TRANSPARENT_HUGEPAGE=y
 # CONFIG_TRANSPARENT_HUGEPAGE_ALWAYS is not set
 CONFIG_TRANSPARENT_HUGEPAGE_MADVISE=y
@@ -102,11 +110,12 @@ function kernel_version() {
 }
 function remove_wifi() {
   local target=$1
-  #去除依赖
-  sed -i 's/\(ath11k-firmware-[^ ]*\|ipq-wifi-[^ ]*\|kmod-ath11k-[^ ]*\)//g' ./target/linux/qualcommax/Makefile
-  sed -i 's/\(ath11k-firmware-[^ ]*\|ipq-wifi-[^ ]*\|kmod-ath11k-[^ ]*\)//g' ./target/linux/qualcommax/${target}/target.mk
-  sed -i 's/\(ath11k-firmware-[^ ]*\|ipq-wifi-[^ ]*\|kmod-ath11k-[^ ]*\)//g' ./target/linux/qualcommax/image/${target}.mk
-  sed -i 's/\(ath10k-firmware-[^ ]*\|kmod-ath10k [^ ]*\|kmod-ath10k-[^ ]*\)//g' ./target/linux/qualcommax/image/${target}.mk
+  #去除依赖（循环正则剥离 wpad/hostapd/ath*/mac80211/cfg80211 等无线包依赖）
+  local wifi_pkg_pattern='wpad-[^ ]*|hostapd-[^ ]*|kmod-ath|kmod-ath10k|kmod-ath10k-[^ ]*|kmod-ath11k|kmod-ath11k-[^ ]*|kmod-mac80211|kmod-cfg80211|ath10k-firmware-[^ ]*|ath11k-firmware-[^ ]*|ipq-wifi-[^ ]*'
+  sed -i -E ":again; s/(^|[[:space:]])-?(${wifi_pkg_pattern})([[:space:]]|$)/ /g; t again; s/[[:space:]]+$//" ./target/linux/qualcommax/Makefile
+  sed -i -E ":again; s/(^|[[:space:]])-?(${wifi_pkg_pattern})([[:space:]]|$)/ /g; t again; s/[[:space:]]+$//" ./target/linux/qualcommax/${target}/target.mk
+  sed -i -E ":again; s/(^|[[:space:]])-?(${wifi_pkg_pattern})([[:space:]]|$)/ /g; t again; s/[[:space:]]+$//" ./target/linux/qualcommax/image/${target}.mk
+  sed -i 's/\bkmod-qca-nss-drv-wifi-meshmgr\b//g' ./target/linux/qualcommax/Makefile
   #删除无线组件
   rm -rf package/network/services/hostapd
   rm -rf package/firmware/ipq-wifi
@@ -120,6 +129,11 @@ function set_kernel_size() {
   sed -i "/^define Device\/jdcloud_re-cs-07/,/^endef/ { /KERNEL_SIZE := 6144k/s//KERNEL_SIZE := 12288k/ }" $image_file
   sed -i "/^define Device\/redmi_ax5-jdcloud/,/^endef/ { /KERNEL_SIZE := 6144k/s//KERNEL_SIZE := 12288k/ }" $image_file
   sed -i "/^define Device\/linksys_mr/,/^endef/ { /KERNEL_SIZE := 8192k/s//KERNEL_SIZE := 12288k/ }" $image_file
+  # 容错校验：若上游改动 KERNEL_SIZE 写法导致替换静默失效，编译期给出显式告警
+  if ! grep -A20 "^define Device/jdcloud_re-ss-01" "$image_file" | grep -q "KERNEL_SIZE := 12288k"; then
+    echo "WARNING: jdcloud_re-ss-01 KERNEL_SIZE 扩容未生效，请检查上游 ipq60xx.mk 格式是否变化"
+    grep -A12 "^define Device/jdcloud_re-ss-01" "$image_file"
+  fi
 }
 #开启内存回收补丁
 function enable_skb_recycler() {
