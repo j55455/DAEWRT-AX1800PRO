@@ -130,6 +130,9 @@ CONFIG_PACKAGE_btop=y
 CONFIG_LUCI_LANG_zh_Hans=y
 CONFIG_PACKAGE_default-settings=y
 CONFIG_PACKAGE_default-settings-chn=y
+#时区数据库集成（保障 MosDNS/Go 程序日志北京时间 +0800）
+CONFIG_PACKAGE_zoneinfo-core=y
+CONFIG_PACKAGE_zoneinfo-asia=y
 CONFIG_PACKAGE_bash=y
 CONFIG_PACKAGE_bind-dig=y
 # CONFIG_PACKAGE_bind-host is not set

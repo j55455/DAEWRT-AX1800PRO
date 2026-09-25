@@ -145,6 +145,14 @@ for f in $(find ./ -type f -name "nikki.conf" 2>/dev/null); do
 	echo "Patched $f: bypass_china_mainland_ip defaulted to 1"
 done
 
+# 固化 MosDNS 启动脚本时区为 Asia/Shanghai，杜绝日志时间偏离 8 小时
+for f in $(find ./ -type f -name "mosdns.init" 2>/dev/null); do
+	if ! grep -q 'TZ="Asia/Shanghai"' "$f"; then
+		sed -i '/procd_open_instance/a \	procd_set_param env TZ="Asia/Shanghai"' "$f"
+		echo "Patched $f: TZ=Asia/Shanghai injected into mosdns.init"
+	fi
+done
+
 # 注入首次开机出厂预设（流表全硬件加速、4核软中断均衡、WAN MTU 1492、开放WiFi、Nikki出厂直连）
 mkdir -p ./package/base-files/files/etc/uci-defaults
 cat > ./package/base-files/files/etc/uci-defaults/99-jdc-defaults << 'EOF'
@@ -175,6 +183,12 @@ if [ -f /etc/config/nikki ]; then
 	uci -q set nikki.proxy.bypass_china_mainland_ip6='1'
 	uci -q commit nikki
 fi
+
+# 7. 固化系统与 MosDNS 时区软链接
+[ -e /usr/share/zoneinfo/Asia/Shanghai ] && ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
+uci -q set system.@system[0].zonename='Asia/Shanghai'
+uci -q set system.@system[0].timezone='CST-8'
+uci -q commit system
 
 uci -q commit network
 uci -q commit firewall
