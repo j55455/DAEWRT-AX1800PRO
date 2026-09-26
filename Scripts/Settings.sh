@@ -118,11 +118,6 @@ for q in /sys/class/net/*/queues/rx-*; do
 	[ -e "$q/rps_cpus" ] && echo "f" > "$q/rps_cpus"
 done
 
-# 锁定 CPU 最高工作频率与 Performance 调速器，消除调频延迟毛刺
-for gov in /sys/devices/system/cpu/cpufreq/policy*/scaling_governor; do
-	[ -e "$gov" ] && echo "performance" > "$gov"
-done
-
 # 守卫：防止 Nikki bypass 掉回 0（杜绝页面误保存或订阅更新覆写）
 if [ -f /etc/config/nikki ]; then
 	[ "$(uci -q get nikki.proxy.bypass_china_mainland_ip)" != "1" ] && {
@@ -189,6 +184,14 @@ fi
 uci -q set system.@system[0].zonename='Asia/Shanghai'
 uci -q set system.@system[0].timezone='CST-8'
 uci -q commit system
+
+# 8. 预设 CPU 调频为 Schedutil 动态平衡模式，额定最高 1.2GHz（消除发热与断流，保留 Web 自由调节）
+if [ -f /etc/config/cpufreq ]; then
+	uci -q set cpufreq.cpufreq.governor0='schedutil'
+	uci -q set cpufreq.cpufreq.minfreq0='864000'
+	uci -q set cpufreq.cpufreq.maxfreq0='1200000'
+	uci -q commit cpufreq
+fi
 
 uci -q commit network
 uci -q commit firewall

@@ -106,3 +106,44 @@ else:
     print('theme-aurora studio.js signature mismatch in ' + p)
 " "$f"
 done
+
+# 优化 cpufreq 启动时序（延后至 85，确保 qualcommax 驱动就绪）与 LuCI 前端易用性
+CPUFREQ_INIT=$(find ./ ../feeds/ -type f -name "cpufreq.init" 2>/dev/null | head -n 1)
+if [ -n "$CPUFREQ_INIT" ] && [ -f "$CPUFREQ_INIT" ]; then
+	sed -i 's/START=15/START=85/g' "$CPUFREQ_INIT"
+	echo "cpufreq.init START adjusted to 85!"
+fi
+
+CPUFREQ_VIEW=$(find ./ ../feeds/ -type f -name "cpufreq.js" 2>/dev/null | head -n 1)
+if [ -n "$CPUFREQ_VIEW" ] && [ -f "$CPUFREQ_VIEW" ]; then
+	python3 -c "
+import sys
+p = sys.argv[1]
+with open(p, 'r', encoding='utf-8') as f:
+    c = f.read()
+
+old_val = 'for (let freq of data[1][i].freqs)\n\t\t\t\t\to.value(freq);'
+new_val = '''for (let freq of data[1][i].freqs) {
+\t\t\t\t\tlet f = parseInt(freq), fl = f >= 1000000 ? (f/1000000).toFixed(2) + ' GHz' : Math.round(f/1000) + ' MHz';
+\t\t\t\t\tif (f === 864000) fl += ' (低负载节能)';
+\t\t\t\t\telse if (f === 1200000) fl += ' (官方额定频率/稳态)';
+\t\t\t\t\telse if (f === 1512000) fl += ' (极限睿频/发热高)';
+\t\t\t\t\to.value(freq, fl);
+\t\t\t\t}'''
+
+old_gov = 'for (let gov of data[1][i].governors)\n\t\t\t\t\to.value(gov);'
+new_gov = '''for (let gov of data[1][i].governors) {
+\t\t\t\t\tlet gl = (gov === 'schedutil') ? 'schedutil (动态平衡/低温推荐)' : (gov === 'performance') ? 'performance (全核锁最高频/发热大)' : gov;
+\t\t\t\t\to.value(gov, gl);
+\t\t\t\t}'''
+
+if old_gov in c:
+    c = c.replace(old_gov, new_gov)
+if old_val in c:
+    c = c.replace(old_val, new_val)
+
+with open(p, 'w', encoding='utf-8') as f:
+    f.write(c)
+print('cpufreq.js view labels enhanced!')
+" "$CPUFREQ_VIEW"
+fi
