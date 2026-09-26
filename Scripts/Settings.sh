@@ -20,8 +20,8 @@ if [ -f "$WIFI_SH" ]; then
 elif [ -f "$WIFI_UC" ]; then
 	#修改WIFI名称
 	sed -i "s/ssid='.*'/ssid='$WRT_SSID'/g" $WIFI_UC
-	#修改WIFI地区（锁定 US 功率完全解锁）
-	sed -i "s/country='.*'/country='US'/g" $WIFI_UC
+	#修改WIFI地区（锁定 AU：兼顾覆盖与散热，避免 US 29dBm 极限烤机）
+	sed -i "s/country='.*'/country='AU'/g" $WIFI_UC
 	#开放网络不设密码
 	sed -i "s/encryption='.*'/encryption='none'/g" $WIFI_UC
 	sed -i "/key=/d" $WIFI_UC
@@ -107,10 +107,7 @@ net.netfilter.nf_conntrack_tcp_no_window_check = 1
 net.netfilter.nf_conntrack_tcp_timeout_established = 7440
 # 关闭 conntrack 冗余校验和计算，节省转发 CPU 周期
 net.netfilter.nf_conntrack_checksum = 0
-# 局域网有线/WiFi 网桥流量免过防火墙，释放内网转发性能
-net.bridge.bridge-nf-call-iptables = 0
-net.bridge.bridge-nf-call-ip6tables = 0
-net.bridge.bridge-nf-call-arptables = 0
+# 注意：6.12 + fw4(nftables) 未加载 br_netfilter 模块，写入 net.bridge.* 会触发 sysctl unknown key 报错，故移除
 # 跨接口 ARP 隔离，防止多网段 ARP 污染
 net.ipv4.conf.all.arp_ignore = 1
 net.ipv4.conf.default.arp_ignore = 1
@@ -176,9 +173,9 @@ uci -q set network.globals.packet_steering='1'
 # 2. 固化 WAN 口 MTU 为 1492，贴合上级光猫 PPPoE 路径消除分片
 uci -q set network.wan.mtu='1492'
 
-# 3. 激活防火墙全硬件流表加速 (Flow Offloading)
-uci -q set firewall.@defaults[0].flow_offloading='1'
-uci -q set firewall.@defaults[0].flow_offloading_hw='1'
+# 3. 关闭 Linux 通用流表（交由高通 NSS ECM 硬件流表接管，避免两套流表互抢）
+uci -q set firewall.@defaults[0].flow_offloading='0'
+uci -q set firewall.@defaults[0].flow_offloading_hw='0'
 
 # 4. 确保 WAN 口开启 TCP MSS 自动规约 (MSS Clamping)
 uci -q set firewall.@zone[1].mtu_fix='1'
@@ -213,17 +210,17 @@ fi
 
 # 9. 固化 NSS 3 队列多核中断绑定，释放 CPU 0 专供系统与代理
 if [ -f /etc/config/nss ]; then
-	uci -q set nss.@general[0].enable_rps='1'
+	uci -q set nss.general.enable_rps='1'
 	uci -q commit nss
 fi
 
-# 10. 锁定 WiFi 国家码为 US（解锁高通原厂 FEM 射频功放最大发射功率）
+# 10. 锁定 WiFi 国家码为 AU（兼顾覆盖与散热，避免 US 极限功率烤机）
 for w in $(uci -q show wireless | grep '=wifi-device' | cut -d'.' -f2 | cut -d'=' -f1); do
-	uci -q set wireless.${w}.country='US'
+	uci -q set wireless.${w}.country='AU'
 done
 
-# 11. Dnsmasq 缓存扩展 (8192) 与 EDNS0 大小规约 (1232)
-uci -q set dhcp.@dnsmasq[0].cachesize='8192'
+# 11. Dnsmasq 缓存交由 MosDNS 接管（cachesize=0），仅设置 EDNS0 大小规约
+uci -q set dhcp.@dnsmasq[0].cachesize='0'
 uci -q set dhcp.@dnsmasq[0].ednspacket_max='1232'
 uci -q commit dhcp
 
@@ -332,7 +329,7 @@ device=$(basename $DEVPATH)
 case "$ACTION" in
 	add)
 		case "$device" in
-			sd*|md*|hd*|mmcblk*) ;;
+			sd*|hd*|vd*) ;;
 			*) return ;;
 		esac
 
