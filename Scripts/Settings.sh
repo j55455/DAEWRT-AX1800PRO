@@ -214,6 +214,15 @@ if [ -f /etc/config/nss ]; then
 	uci -q commit nss
 fi
 
+# 9.1 补齐 /etc/config/ecm 缺失的 general 段
+#     （旧版 luci-app-ecm 覆盖 ROM 配置后只剩 global 段；
+#      disable_offloads.sh 与 qca-nss-ecm 读 general 段，缺失即取默认值。
+#      补齐后与 ROM 出厂值完全一致，恢复这些调优开关的可配置性。）
+if [ -f /etc/config/ecm ] && ! uci -q get ecm.general >/dev/null 2>&1; then
+	printf "\nconfig ecm 'general'\n\toption disable_offloads '0'\n\toption disable_flow_control '0'\n\toption disable_interrupt_moderation '0'\n\toption disable_gro '0'\n\toption disable_gro_list '1'\n" >> /etc/config/ecm
+	uci -q commit ecm
+fi
+
 # 10. 锁定 WiFi 国家码为 AU（兼顾覆盖与散热，避免 US 极限功率烤机）
 for w in $(uci -q show wireless | grep '=wifi-device' | cut -d'.' -f2 | cut -d'=' -f1); do
 	uci -q set wireless.${w}.country='AU'
@@ -232,71 +241,14 @@ EOF
 chmod +x ./package/base-files/files/etc/uci-defaults/99-jdc-defaults
 echo "AX1800 Pro 99-jdc-defaults injected!"
 
-# 预置动态 RPS/XPS 智能多核心避让分流脚本
-mkdir -p ./package/base-files/files/etc/hotplug.d/net
-cat > ./package/base-files/files/etc/hotplug.d/net/20-smp-tune << 'EOF'
-#!/bin/sh
-[ "$ACTION" = add ] || exit
-
-NPROCS="$(grep -c "^processor.*:" /proc/cpuinfo)"
-[ "$NPROCS" -gt 1 ] || exit
-
-PROC_MASK="$(( (1 << $NPROCS) - 1 ))"
-
-find_irq_cpu() {
-	local dev="$1"
-	local match="$(grep -m 1 "$dev\$" /proc/interrupts)"
-	local cpu=0
-
-	[ -n "$match" ] && {
-		set -- $match
-		shift
-		for cur in $(seq 1 $NPROCS); do
-			[ "$1" -gt 0 ] && {
-				cpu=$(($cur - 1))
-				break
-			}
-			shift
-		done
-	}
-
-	echo "$cpu"
-}
-
-set_hex_val() {
-	local file="$1"
-	local val="$2"
-	val="$(printf %x "$val")"
-	[ -n "$DEBUG" ] && echo "$file = $val"
-	echo "$val" > "$file"
-}
-
-exec 512>/var/lock/smp_tune.lock
-flock 512 || exit 1
-
-for dev in /sys/class/net/*; do
-	[ -d "$dev" ] || continue
-	[ -n "$(ls "${dev}/" 2>/dev/null | grep '^lower_')" ] && continue
-	[ -d "${dev}/device" ] || continue
-
-	device="$(readlink "${dev}/device")"
-	device="$(basename "$device")"
-	irq_cpu="$(find_irq_cpu "$device")"
-	irq_cpu_mask="$((1 << $irq_cpu))"
-
-	for q in ${dev}/queues/rx-*; do
-		[ -e "$q/rps_cpus" ] && set_hex_val "$q/rps_cpus" "$(($PROC_MASK & ~$irq_cpu_mask))"
-	done
-
-	idx=$(($irq_cpu + 1))
-	for q in ${dev}/queues/tx-*; do
-		[ -e "$q/xps_cpus" ] && set_hex_val "$q/xps_cpus" "$((1 << $idx))"
-		idx=$(($idx + 1))
-		[ "$idx" -ge "$NPROCS" ] && idx=0
-	done
-done
-EOF
-chmod +x ./package/base-files/files/etc/hotplug.d/net/20-smp-tune
+# 说明：原 QWRT 的 /etc/hotplug.d/net/20-smp-tune 脚本已移除（不再生成）。
+# 原因（实机核验）：
+#   1) 其"按网卡设备名反查硬件中断所在 CPU"的前提在 QUALCOMMAX EDMA 架构上不成立
+#      —— /proc/interrupts 中为多端口共用的 edma_txcmpl/edma_rxdesc/nss_queue*，
+#      不含 3a001200.dp2 这类设备名，故 find_irq_cpu 恒返回 CPU 0；
+#   2) OpenWrt 原生 network.globals.packet_steering=1 已负责 RPS 分配，实机确认其
+#      单核轮转结果（lan1=1/lan2=4/lan3=8/wan=2）已覆盖本脚本的赋值；
+#   3) 保留该脚本只会产生被覆盖的死代码，故移除，交由原生机制统一管理。
 
 # 预置移动存储设备热插拔自动挂载 Samba4 共享
 mkdir -p ./package/base-files/files/etc/hotplug.d/block
