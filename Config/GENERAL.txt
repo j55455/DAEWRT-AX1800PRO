@@ -52,6 +52,20 @@ CONFIG_PACKAGE_luci-app-attendedsysupgrade=n
 #彻底移除 SQM 队列管理（NSS 平台下会击穿硬件加速，用户不使用）
 CONFIG_PACKAGE_luci-app-sqm=n
 CONFIG_PACKAGE_sqm-scripts-nss=n
+#恢复因移除 SQM 而误删的 iptables/xtables/nft-compat 兼容栈与 tc/cake（SQM 本身仍保持移除）
+CONFIG_PACKAGE_kmod-nft-compat=y
+CONFIG_PACKAGE_kmod-ipt-core=y
+CONFIG_PACKAGE_kmod-ipt-ipopt=y
+CONFIG_PACKAGE_iptables-mod-ipopt=y
+CONFIG_PACKAGE_iptables-nft=y
+CONFIG_PACKAGE_xtables-nft=y
+CONFIG_PACKAGE_libxtables=y
+CONFIG_PACKAGE_libiptext=y
+CONFIG_PACKAGE_libiptext6=y
+CONFIG_PACKAGE_libiptext-nft=y
+CONFIG_PACKAGE_kmod-nf-ipt=y
+CONFIG_PACKAGE_tc-tiny=y
+CONFIG_PACKAGE_kmod-sched-cake=y
 #参数调整
 CONFIG_CCACHE=y
 CONFIG_DEVEL=y
