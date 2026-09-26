@@ -1,0 +1,44 @@
+msgid ""
+msgstr "Content-Type: text/plain; charset=UTF-8\n"
+
+msgid "NSS ECM"
+msgstr "NSS ECM 加速"
+
+msgid "NSS ECM Acceleration Engine"
+msgstr "高通 NSS ECM 硬件加速引擎"
+
+msgid "Setting NSS ECM Acceleration Engine"
+msgstr "配置高通 NSS ECM 网络流表硬件卸载模式与连接参数"
+
+msgid "Global Settings"
+msgstr "全局设置"
+
+msgid "Acceleration Engine"
+msgstr "加速引擎"
+
+msgid "Auto"
+msgstr "自动 (推荐)"
+
+msgid "NSS Mode"
+msgstr "纯 NSS 硬件加速"
+
+msgid "SFE Mode"
+msgstr "纯 SFE 软件加速"
+
+msgid "NSS+SFE Hybrid Mode"
+msgstr "NSS + SFE 混合加速模式"
+
+msgid "Acceleration Engine Mode"
+msgstr "选择网络硬件连接加速引擎模式"
+
+msgid "Max TCP Connection"
+msgstr "最大 TCP 并发连接数"
+
+msgid "This parameter limits the maximum number of connections that TCP can have open at the same time"
+msgstr "限制系统可同时打开的最大 TCP 连接跟踪数量（针对 1GB 内存预置 500,000）"
+
+msgid "UDP Bridge Hardware Redirect Offload"
+msgstr "UDP 网桥重定向硬件卸载"
+
+msgid "Afford NATloopback/UDP Relay/Docker Network etc."
+msgstr "支持 NAT 回流、UDP 组播中继与局域网网桥二层硬件加速"

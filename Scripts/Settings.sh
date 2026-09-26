@@ -20,8 +20,8 @@ if [ -f "$WIFI_SH" ]; then
 elif [ -f "$WIFI_UC" ]; then
 	#修改WIFI名称
 	sed -i "s/ssid='.*'/ssid='$WRT_SSID'/g" $WIFI_UC
-	#修改WIFI地区
-	sed -i "s/country='.*'/country='AU'/g" $WIFI_UC
+	#修改WIFI地区（锁定 US 功率完全解锁）
+	sed -i "s/country='.*'/country='US'/g" $WIFI_UC
 	#开放网络不设密码
 	sed -i "s/encryption='.*'/encryption='none'/g" $WIFI_UC
 	sed -i "/key=/d" $WIFI_UC
@@ -100,6 +100,22 @@ net.core.bpf_jit_enable = 1
 net.core.bpf_jit_harden = 0
 vm.min_free_kbytes = 32768
 vm.vfs_cache_pressure = 50
+
+# QWRT 精髓调优：关闭 TCP 窗口检测（杜绝 NSS 硬件加速与透明代理流量被误杀断流）
+net.netfilter.nf_conntrack_tcp_no_window_check = 1
+# 连接建立保活超时从 5 天砍至 2 小时，高并发 P2P 秒级释放陈旧会话，杜绝爆表
+net.netfilter.nf_conntrack_tcp_timeout_established = 7440
+# 关闭 conntrack 冗余校验和计算，节省转发 CPU 周期
+net.netfilter.nf_conntrack_checksum = 0
+# 局域网有线/WiFi 网桥流量免过防火墙，释放内网转发性能
+net.bridge.bridge-nf-call-iptables = 0
+net.bridge.bridge-nf-call-ip6tables = 0
+net.bridge.bridge-nf-call-arptables = 0
+# 跨接口 ARP 隔离，防止多网段 ARP 污染
+net.ipv4.conf.all.arp_ignore = 1
+net.ipv4.conf.default.arp_ignore = 1
+# 内核 Panic 3 秒后自动硬重启，杜绝死机失联
+kernel.panic = 3
 EOF
 	echo "AX1800 Pro 1GB sysctl tuning injected!"
 fi
@@ -193,6 +209,22 @@ if [ -f /etc/config/cpufreq ]; then
 	uci -q commit cpufreq
 fi
 
+# 9. 固化 NSS 3 队列多核中断绑定，释放 CPU 0 专供系统与代理
+if [ -f /etc/config/nss ]; then
+	uci -q set nss.@general[0].enable_rps='1'
+	uci -q commit nss
+fi
+
+# 10. 锁定 WiFi 国家码为 US（解锁高通原厂 FEM 射频功放最大发射功率）
+for w in $(uci -q show wireless | grep '=wifi-device' | cut -d'.' -f2 | cut -d'=' -f1); do
+	uci -q set wireless.${w}.country='US'
+done
+
+# 11. Dnsmasq 缓存扩展 (8192) 与 EDNS0 大小规约 (1232)
+uci -q set dhcp.@dnsmasq[0].cachesize='8192'
+uci -q set dhcp.@dnsmasq[0].ednspacket_max='1232'
+uci -q commit dhcp
+
 uci -q commit network
 uci -q commit firewall
 uci -q commit wireless
@@ -200,6 +232,173 @@ exit 0
 EOF
 chmod +x ./package/base-files/files/etc/uci-defaults/99-jdc-defaults
 echo "AX1800 Pro 99-jdc-defaults injected!"
+
+# 预置 NSS 3 队列多核中断硬绑定配置
+mkdir -p ./package/base-files/files/etc/config
+cat > ./package/base-files/files/etc/config/nss << 'EOF'
+config nss_firmware 'qca_nss_0'
+
+config nss_firmware 'qca_nss_1'
+
+config general
+	option enable_rps '1'
+EOF
+
+# 预置 WAN 重连自动热插拔重启 MosDNS 脚本
+mkdir -p ./package/base-files/files/etc/hotplug.d/iface
+cat > ./package/base-files/files/etc/hotplug.d/iface/99-mosdns << 'EOF'
+#!/bin/sh
+[ "$ACTION" = ifup ] && [ -x /etc/init.d/mosdns ] && /etc/init.d/mosdns restart
+EOF
+chmod +x ./package/base-files/files/etc/hotplug.d/iface/99-mosdns
+
+# 预置动态 RPS/XPS 智能多核心避让分流脚本
+mkdir -p ./package/base-files/files/etc/hotplug.d/net
+cat > ./package/base-files/files/etc/hotplug.d/net/20-smp-tune << 'EOF'
+#!/bin/sh
+[ "$ACTION" = add ] || exit
+
+NPROCS="$(grep -c "^processor.*:" /proc/cpuinfo)"
+[ "$NPROCS" -gt 1 ] || exit
+
+PROC_MASK="$(( (1 << $NPROCS) - 1 ))"
+
+find_irq_cpu() {
+	local dev="$1"
+	local match="$(grep -m 1 "$dev\$" /proc/interrupts)"
+	local cpu=0
+
+	[ -n "$match" ] && {
+		set -- $match
+		shift
+		for cur in $(seq 1 $NPROCS); do
+			[ "$1" -gt 0 ] && {
+				cpu=$(($cur - 1))
+				break
+			}
+			shift
+		done
+	}
+
+	echo "$cpu"
+}
+
+set_hex_val() {
+	local file="$1"
+	local val="$2"
+	val="$(printf %x "$val")"
+	[ -n "$DEBUG" ] && echo "$file = $val"
+	echo "$val" > "$file"
+}
+
+exec 512>/var/lock/smp_tune.lock
+flock 512 || exit 1
+
+for dev in /sys/class/net/*; do
+	[ -d "$dev" ] || continue
+	[ -n "$(ls "${dev}/" 2>/dev/null | grep '^lower_')" ] && continue
+	[ -d "${dev}/device" ] || continue
+
+	device="$(readlink "${dev}/device")"
+	device="$(basename "$device")"
+	irq_cpu="$(find_irq_cpu "$device")"
+	irq_cpu_mask="$((1 << $irq_cpu))"
+
+	for q in ${dev}/queues/rx-*; do
+		[ -e "$q/rps_cpus" ] && set_hex_val "$q/rps_cpus" "$(($PROC_MASK & ~$irq_cpu_mask))"
+	done
+
+	idx=$(($irq_cpu + 1))
+	for q in ${dev}/queues/tx-*; do
+		[ -e "$q/xps_cpus" ] && set_hex_val "$q/xps_cpus" "$((1 << $idx))"
+		idx=$(($idx + 1))
+		[ "$idx" -ge "$NPROCS" ] && idx=0
+	done
+done
+EOF
+chmod +x ./package/base-files/files/etc/hotplug.d/net/20-smp-tune
+
+# 预置移动存储设备热插拔自动挂载 Samba4 共享
+mkdir -p ./package/base-files/files/etc/hotplug.d/block
+cat > ./package/base-files/files/etc/hotplug.d/block/20-smb << 'EOF'
+#!/bin/sh
+. /lib/functions.sh
+. /lib/functions/service.sh
+
+config_file="/etc/config/samba4"
+[ -f "$config_file" ] || config_file="/etc/config/samba"
+smb_service="samba4"
+[ -x "/etc/init.d/samba4" ] || smb_service="samba"
+
+global=0
+
+wait_for_init() {
+	for i in $(seq 30); do
+		[ -e /tmp/procd.done ] && return
+		sleep 1
+	done
+}
+
+smb_handle() {
+	config_get path $1 path
+	[ "$path" = "$2" ] && global=1
+}
+
+device=$(basename $DEVPATH)
+
+case "$ACTION" in
+	add)
+		case "$device" in
+			sd*|md*|hd*|mmcblk*) ;;
+			*) return ;;
+		esac
+
+		path="/dev/$device"
+		wait_for_init
+
+		cat /proc/mounts | while read j; do
+			str=${j%% *}
+			if [ "$str" = "$path" ]; then
+				strr=${j#* }
+				target=${strr%% *}
+				global=0
+				config_load "$smb_service"
+				config_foreach smb_handle sambashare "$target"
+				name=${target#*/mnt/}
+
+				if [ $global -eq 0 ]; then
+					echo -e "\nconfig sambashare" >> $config_file
+					echo -e "\toption auto '1'" >> $config_file
+					echo -e "\toption name '$name'" >> $config_file
+					echo -e "\toption path '$target'" >> $config_file
+					echo -e "\toption read_only 'no'" >> $config_file
+					echo -e "\toption guest_ok 'yes'" >> $config_file
+					echo -e "\toption create_mask '0666'" >> $config_file
+					echo -e "\toption dir_mask '0777'" >> $config_file
+					echo -e "\toption device '$device'" >> $config_file
+					/etc/init.d/$smb_service reload >/dev/null 2>&1
+					return
+				fi
+			fi
+		done
+		;;
+	remove)
+		i=0
+		while true; do
+			dev=$(uci -q get ${smb_service}.@sambashare[$i].device)
+			[ -z "$dev" ] && break
+			if [ "$dev" = "$device" ]; then
+				uci -q delete ${smb_service}.@sambashare[$i]
+				uci -q commit $smb_service
+				/etc/init.d/$smb_service reload >/dev/null 2>&1
+				return
+			fi
+			i=$((i + 1))
+		done
+		;;
+esac
+EOF
+chmod +x ./package/base-files/files/etc/hotplug.d/block/20-smb
 
 # Samba4 局域网千兆传输性能调优与 root 登录预设
 SAMBA_TEMPLATE=$(find ./feeds/packages/net/samba4/ -type f -name "smb.conf.template" 2>/dev/null)

@@ -68,6 +68,9 @@ UPDATE_PACKAGE "viking" "VIKINGYFY/packages" "main" "" "axonhub gecoosac sing-bo
 # UPDATE_PACKAGE "vnt" "lmq8267/luci-app-vnt" "main"
 UPDATE_PACKAGE "luci-app-tailscale" "asvow/luci-app-tailscale" "main"
 
+# 引入本地仓库专属定制包（luci-app-ecm 高通硬件加速控制面板）
+[ -d "$GITHUB_WORKSPACE/package/luci-app-ecm" ] && cp -rf "$GITHUB_WORKSPACE/package/luci-app-ecm" ./
+
 # 彻底清理系统 feeds 自带的旧版官方 dae/daed 软链接与源码（彻底避免被 1.27 旧版劫持）
 rm -rf ../feeds/packages/net/dae ../feeds/packages/net/daed
 rm -rf ../feeds/luci/applications/luci-app-dae ../feeds/luci/applications/luci-app-daed

@@ -1,0 +1,11 @@
+#!/bin/sh
+
+uci -q batch <<-EOF >/dev/null
+	delete ucitrack.@ecm[-1]
+	add ucitrack ecm
+	set ucitrack.@ecm[-1].init=qca-nss-ecm
+	commit ucitrack
+EOF
+
+rm -f /tmp/luci-indexcache
+exit 0

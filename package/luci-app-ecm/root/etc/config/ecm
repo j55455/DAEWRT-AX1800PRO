@@ -1,0 +1,4 @@
+config ecm 'global'
+	option acceleration_engine 'auto'
+	option max_con '500000'
+	option bridge_acc '1'

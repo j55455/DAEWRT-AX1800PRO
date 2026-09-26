@@ -1,0 +1,11 @@
+{
+	"luci-app-ecm": {
+		"description": "Grant UCI access for luci-app-ecm",
+		"read": {
+			"uci": [ "ecm" ]
+		},
+		"write": {
+			"uci": [ "ecm" ]
+		}
+	}
+}
