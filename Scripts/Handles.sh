@@ -138,3 +138,30 @@ with open(p, 'w', encoding='utf-8') as f:
 print('cpufreq.js view labels enhanced!')
 " "$CPUFREQ_VIEW"
 fi
+
+# ================= 系统级冲突永久固化补丁 =================
+
+# 1. 拔除开机对 packet_steering 的反向覆写
+#    来源A: 系统预设 991_set-network.sh (字典序晚于 99-jdc-defaults)
+#    来源B: qca-nss-ecm.init 原生 disable_packet_steering() 会 uci commit 写盘为 0
+for f in $(find ./ ../feeds/ ../target/ -type f -name "*set-network*.sh" 2>/dev/null); do
+	sed -i "s/packet_steering='0'/packet_steering='1'/g; s/packet_steering=0/packet_steering=1/g" "$f"
+	echo "Patched packet_steering -> 1 in $f"
+done
+
+for f in $(find ./ ../feeds/ ../target/ -type f -name "qca-nss-ecm.init" 2>/dev/null); do
+	sed -i '/^disable_packet_steering()/,/^}/c\disable_packet_steering() {\n\treturn 0\n}' "$f"
+	echo "Neutralized disable_packet_steering in $f"
+done
+
+# 2. 统一 conntrack 上限为 1GB 机型调优值 500000，杜绝被原生脚本砍回 65535
+for f in $(find ./ ../feeds/ ../target/ -type f \( -name "qca-nss-ecm.conf" -o -name "11-nf-conntrack.conf" -o -name "*ecm-conntrack*.sh" \) 2>/dev/null); do
+	sed -i "s/nf_conntrack_max *= *65535/nf_conntrack_max=500000/g" "$f"
+	echo "Patched nf_conntrack_max -> 500000 in $f"
+done
+
+# 3. 移除 pbuf 出厂配置中对 CPU 调频的 performance 硬锁（QCA 原厂脚本会覆写 governor）
+for f in $(find ./ ../feeds/ ../target/ -type f -path "*/config/pbuf" 2>/dev/null); do
+	sed -i "/scaling_governor/d" "$f"
+	echo "Removed scaling_governor lock in $f"
+done
