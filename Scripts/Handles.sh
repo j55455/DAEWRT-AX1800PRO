@@ -123,19 +123,10 @@ with open(p, 'r', encoding='utf-8') as f:
     c = f.read()
 
 old_val = 'for (let freq of data[1][i].freqs)\n\t\t\t\t\to.value(freq);'
-new_val = '''for (let freq of data[1][i].freqs) {
-\t\t\t\t\tlet f = parseInt(freq), fl = f >= 1000000 ? (f/1000000).toFixed(2) + ' GHz' : Math.round(f/1000) + ' MHz';
-\t\t\t\t\tif (f === 864000) fl += ' (低负载节能)';
-\t\t\t\t\telse if (f === 1200000) fl += ' (官方额定频率/稳态)';
-\t\t\t\t\telse if (f === 1512000) fl += ' (极限睿频/发热高)';
-\t\t\t\t\to.value(freq, fl);
-\t\t\t\t}'''
+new_val = 'for (let freq of data[1][i].freqs) { let f = parseInt(freq), fl = f >= 1000000 ? (f/1000000).toFixed(2) + \" GHz\" : Math.round(f/1000) + \" MHz\"; if (f === 864000) fl += \" (低负载节能)\"; else if (f === 1200000) fl += \" (官方额定/推荐)\"; else if (f === 1512000) fl += \" (极限睿频/发热高)\"; o.value(freq, fl); }'
 
 old_gov = 'for (let gov of data[1][i].governors)\n\t\t\t\t\to.value(gov);'
-new_gov = '''for (let gov of data[1][i].governors) {
-\t\t\t\t\tlet gl = (gov === 'schedutil') ? 'schedutil (动态平衡/低温推荐)' : (gov === 'performance') ? 'performance (全核锁最高频/发热大)' : gov;
-\t\t\t\t\to.value(gov, gl);
-\t\t\t\t}'''
+new_gov = 'for (let gov of data[1][i].governors) { let gl = (gov === \"schedutil\") ? \"schedutil (动态平衡/低温推荐)\" : (gov === \"performance\") ? \"performance (全核锁最高频/发热大)\" : gov; o.value(gov, gl); }'
 
 if old_gov in c:
     c = c.replace(old_gov, new_gov)

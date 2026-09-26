@@ -233,25 +233,6 @@ EOF
 chmod +x ./package/base-files/files/etc/uci-defaults/99-jdc-defaults
 echo "AX1800 Pro 99-jdc-defaults injected!"
 
-# 预置 NSS 3 队列多核中断硬绑定配置
-mkdir -p ./package/base-files/files/etc/config
-cat > ./package/base-files/files/etc/config/nss << 'EOF'
-config nss_firmware 'qca_nss_0'
-
-config nss_firmware 'qca_nss_1'
-
-config general
-	option enable_rps '1'
-EOF
-
-# 预置 WAN 重连自动热插拔重启 MosDNS 脚本
-mkdir -p ./package/base-files/files/etc/hotplug.d/iface
-cat > ./package/base-files/files/etc/hotplug.d/iface/99-mosdns << 'EOF'
-#!/bin/sh
-[ "$ACTION" = ifup ] && [ -x /etc/init.d/mosdns ] && /etc/init.d/mosdns restart
-EOF
-chmod +x ./package/base-files/files/etc/hotplug.d/iface/99-mosdns
-
 # 预置动态 RPS/XPS 智能多核心避让分流脚本
 mkdir -p ./package/base-files/files/etc/hotplug.d/net
 cat > ./package/base-files/files/etc/hotplug.d/net/20-smp-tune << 'EOF'
