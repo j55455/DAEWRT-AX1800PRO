@@ -156,8 +156,10 @@ for f in $(find ./ -type f -name "nikki.conf" 2>/dev/null); do
 	echo "Patched $f: bypass_china_mainland_ip defaulted to 1"
 done
 
-# 固化 MosDNS 启动脚本时区为 Asia/Shanghai，杜绝日志时间偏离 8 小时
+# 固化 MosDNS 启动脚本时区为 Asia/Shanghai 并延后启动顺序（START=99 确保晚于 Nikki 启动），杜绝开机境外 DoH 直连被 GFW 重置
 for f in $(find ./ -type f -name "mosdns.init" 2>/dev/null); do
+	sed -i 's/^START=.*/START=99/g' "$f"
+	sed -i '/rm -rf \/tmp\/log\/mosdns\*/a \	> /var/log/mosdns.log' "$f"
 	if ! grep -q 'TZ="Asia/Shanghai"' "$f"; then
 		sed -i '/procd_open_instance/a \	procd_set_param env TZ="Asia/Shanghai"' "$f"
 		echo "Patched $f: TZ=Asia/Shanghai injected into mosdns.init"
