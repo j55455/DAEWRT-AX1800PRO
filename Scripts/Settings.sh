@@ -208,6 +208,14 @@ if [ -f /etc/config/cpufreq ]; then
 	uci -q commit cpufreq
 fi
 
+# 8.1 移除 QCA pbuf 出厂配置里的 scaling_governor 硬锁
+#     （否则开机第 86 级的 qca-nss-pbuf 会把 CPU 调频覆写为 performance，废掉 Web 端设置。
+#       本 uci-defaults 在开机早期执行，早于 S86，删除后 pbuf 读取为空即不会覆写。）
+if [ -f /etc/config/pbuf ]; then
+	uci -q delete pbuf.opt.scaling_governor
+	uci -q commit pbuf
+fi
+
 # 9. 固化 NSS 3 队列多核中断绑定，释放 CPU 0 专供系统与代理
 if [ -f /etc/config/nss ]; then
 	uci -q set nss.general.enable_rps='1'

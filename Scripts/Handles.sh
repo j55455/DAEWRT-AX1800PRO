@@ -65,7 +65,7 @@ if [ -n "$RUST_FILE" ] && [ -f "$RUST_FILE" ]; then
 fi
 
 #修改argon主题字体和配色
-ARGON_CONF=$(find ./ ../feeds/luci/ -maxdepth 5 -type f -wholename "*/luci-app-argon-config/root/etc/config/argon" 2>/dev/null | head -n 1)
+ARGON_CONF=$(find ./ ../feeds/luci/ -maxdepth 8 -type f -wholename "*/luci-app-argon-config/root/etc/config/argon" 2>/dev/null | head -n 1)
 if [ -n "$ARGON_CONF" ] && [ -f "$ARGON_CONF" ]; then
 	echo " "
 	if sed -i "s/primary '.*'/primary '#31a1a1'/g; s/'0.2'/'0.5'/g; s/'none'/'bing'/g; s/'600'/'normal'/g" "$ARGON_CONF"; then
@@ -74,7 +74,7 @@ if [ -n "$ARGON_CONF" ] && [ -f "$ARGON_CONF" ]; then
 fi
 
 #修改aurora菜单式样与圆角
-AURORA_DIR=$(find ./ ../feeds/luci/ -maxdepth 5 -type d -wholename "*/luci-app-aurora-config/root/usr/share/aurora" 2>/dev/null | head -n 1)
+AURORA_DIR=$(find ./ ../feeds/luci/ -maxdepth 8 -type d -wholename "*/luci-app-aurora-config/root/usr/share/aurora" 2>/dev/null | head -n 1)
 if [ -n "$AURORA_DIR" ] && [ -d "$AURORA_DIR" ]; then
 	echo " "
 	if find "$AURORA_DIR" -type f -name '*.template' -exec \
@@ -161,7 +161,13 @@ for f in $(find ./ ../feeds/ ../target/ -type f \( -name "qca-nss-ecm.conf" -o -
 done
 
 # 3. 移除 pbuf 出厂配置中对 CPU 调频的 performance 硬锁（QCA 原厂脚本会覆写 governor）
-for f in $(find ./ ../feeds/ ../target/ -type f -path "*/config/pbuf" 2>/dev/null); do
-	sed -i "/scaling_governor/d" "$f"
-	echo "Removed scaling_governor lock in $f"
+#    注意：原用 -path "*/config/pbuf" 未能命中（该文件在 feed 内的实际层级更深），
+#    改为按文件名匹配 + grep 守卫，确保真正命中且不误伤。
+for f in $(find ./ ../feeds/ ../target/ -type f \( -name "pbuf" -o -name "pbuf.config" \) 2>/dev/null); do
+	if grep -q "scaling_governor" "$f" 2>/dev/null; then
+		sed -i "/scaling_governor/d" "$f"
+		echo "Removed scaling_governor lock in $f"
+	else
+		echo "pbuf file without scaling_governor, skip: $f"
+	fi
 done
