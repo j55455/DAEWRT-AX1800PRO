@@ -33,8 +33,7 @@ sed -i "s/192\.168\.[0-9]*\.[0-9]*/$WRT_IP/g" $CFG_FILE
 #修改默认主机名
 sed -i "s/hostname='.*'/hostname='$WRT_NAME'/g" $CFG_FILE
 
-vlmcsd_patches="./feeds/packages/net/vlmcsd/patches/"
-[ -f "../patches/001-fix_compile_with_ccache.patch" ] && mkdir -p $vlmcsd_patches && cp -f ../patches/001-fix_compile_with_ccache.patch $vlmcsd_patches
+# （原 vlmcsd ccache 补丁逻辑已移除：仓库内不存在 ../patches/ 目录，该行恒为空操作，属死代码）
 
 #修复dropbear
 # #sed -i "s/Interface/DirectInterface/" ./package/network/services/dropbear/files/dropbear.config
@@ -69,7 +68,7 @@ if [[ $WRT_TARGET == *"QUALCOMMAX"* ]]; then
 	echo "CONFIG_NSS_FIRMWARE_VERSION_11_4=n" >> ./.config
 	echo "CONFIG_NSS_FIRMWARE_VERSION_12_5=y" >> ./.config
 	#无WIFI配置调整Q6大小
-	if [[ "${WRT_CONFIG,,}" == *"wifi"* && "${WRT_CONFIG,,}" == *"no"* ]]; then
+	if [[ "${WRT_CONFIG^^}" == *"NOWIFI"* ]]; then
 		find $DTS_PATH -type f ! -iname '*nowifi*' -exec sed -i 's/ipq\(6018\|8074\).dtsi/ipq\1-nowifi.dtsi/g' {} +
 		echo "qualcommax set up nowifi successfully!"
 	fi
