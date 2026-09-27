@@ -153,12 +153,12 @@ for f in $(find ./ -type f -name "nikki.conf" 2>/dev/null); do
 done
 
 # 固化 MosDNS 启动脚本时区为 Asia/Shanghai 并延后启动顺序（START=99 确保晚于 Nikki 启动），杜绝开机境外 DoH 直连被 GFW 重置
-for f in $(find ./ -type f -name "mosdns.init" 2>/dev/null); do
+for f in $(find ./ -type f \( -name "mosdns" -o -name "mosdns.init" \) -path "*/init.d/*" 2>/dev/null); do
 	sed -i 's/^START=.*/START=99/g' "$f"
 	sed -i '/rm -rf \/tmp\/log\/mosdns\*/a \	> /var/log/mosdns.log' "$f"
 	if ! grep -q 'TZ="Asia/Shanghai"' "$f"; then
 		sed -i '/procd_open_instance/a \	procd_set_param env TZ="Asia/Shanghai"' "$f"
-		echo "Patched $f: TZ=Asia/Shanghai injected into mosdns.init"
+		echo "Patched $f: TZ=Asia/Shanghai injected into mosdns init"
 	fi
 done
 
@@ -235,10 +235,13 @@ for w in $(uci -q show wireless | grep '=wifi-device' | cut -d'.' -f2 | cut -d'=
 	uci -q set wireless.${w}.country='AU'
 done
 
-# 11. Dnsmasq 缓存交由 MosDNS 接管（cachesize=0），仅设置 EDNS0 大小规约
-uci -q set dhcp.@dnsmasq[0].cachesize='0'
+# 11. Dnsmasq 缓存交由 MosDNS 接管（cachesize=0），仅设置 EDNS0 大小规约（daed 变体保持默认本地缓存）
+[ -x /etc/init.d/mosdns ] && uci -q set dhcp.@dnsmasq[0].cachesize='0'
 uci -q set dhcp.@dnsmasq[0].ednspacket_max='1232'
 uci -q commit dhcp
+
+# 12. 确保 MosDNS 开机自启服务软链接就绪，杜绝冷启动 5335 端口断流
+[ -x /etc/init.d/mosdns ] && /etc/init.d/mosdns enable
 
 uci -q commit network
 uci -q commit firewall
@@ -247,6 +250,16 @@ exit 0
 EOF
 chmod +x ./package/base-files/files/etc/uci-defaults/99-jdc-defaults
 echo "AX1800 Pro 99-jdc-defaults injected!"
+
+# 预置 Nikki 虚拟网卡多核软中断自动均衡热插拔脚本（解决 TUN 网卡晚于 rc.local 启动导致丢开 RPS 问题）
+mkdir -p ./package/base-files/files/etc/hotplug.d/net
+cat > ./package/base-files/files/etc/hotplug.d/net/99-nikki-rps << 'EOF'
+#!/bin/sh
+if [ "$DEVICENAME" = "nikki" -o "$INTERFACE" = "nikki" ] || [ -d /sys/class/net/nikki ]; then
+	[ -e /sys/class/net/nikki/queues/rx-0/rps_cpus ] && echo "e" > /sys/class/net/nikki/queues/rx-0/rps_cpus
+fi
+EOF
+chmod +x ./package/base-files/files/etc/hotplug.d/net/99-nikki-rps
 
 # 说明：原 QWRT 的 /etc/hotplug.d/net/20-smp-tune 脚本已移除（不再生成）。
 # 原因（实机核验）：

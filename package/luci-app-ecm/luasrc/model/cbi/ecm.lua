@@ -2,7 +2,7 @@ m = Map("ecm")
 m.title = translate("NSS ECM Acceleration Engine")
 m.description = translate("Setting NSS ECM Acceleration Engine")
 
-s = m:section(TypedSection, "ecm", translate("Global Settings"))
+s = m:section(NamedSection, "global", "ecm", translate("Global Settings"))
 s.addremove = false
 s.anonymous = true
 
